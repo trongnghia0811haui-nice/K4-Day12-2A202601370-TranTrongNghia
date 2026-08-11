@@ -22,6 +22,7 @@ class ShutdownGuard:
         self.draining = False
         # Handler đã được đăng ký trước ta (của uvicorn) — xem arm()
         self._previous: dict = {}
+        self._armed = False
 
     def start_draining(self, signum=None, frame=None) -> None:
         """Signal handler: đánh dấu process đang tắt dần.
@@ -45,7 +46,11 @@ class ShutdownGuard:
         tham số này. Không làm gì nặng ở đây (không gọi mạng, không ghi file)
         — handler chạy xen giữa bytecode.
         """
-        raise NotImplementedError("TODO (CP4): cài đặt start_draining")
+        self.draining = True
+
+        previous = self._previous.get(signum)
+        if callable(previous):
+            previous(signum, frame)
 
     def arm(self) -> None:
         """Đăng ký handler cho SIGTERM và SIGINT, nhớ lại handler cũ.
@@ -57,7 +62,13 @@ class ShutdownGuard:
 
         SIGTERM: orchestrator yêu cầu tắt. SIGINT: bạn bấm Ctrl+C.
         """
-        raise NotImplementedError("TODO (CP4): cài đặt arm")
+        if self._armed:
+            return
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            self._previous[sig] = signal.getsignal(sig)
+            signal.signal(sig, self.start_draining)
+        self._armed = True
 
 
 # Một instance dùng chung cho cả app

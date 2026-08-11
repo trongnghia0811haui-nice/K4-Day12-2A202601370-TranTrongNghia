@@ -62,10 +62,7 @@ def get_cost_guard() -> CostGuard:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """CHO SẴN — chạy lúc app khởi động và lúc tắt."""
-    try:
-        shutdown_guard.arm()
-    except NotImplementedError:
-        pass
+    shutdown_guard.arm()
     emit("service_started", service=SERVICE_NAME, version=SERVICE_VERSION)
     yield
     emit("service_stopped", service=SERVICE_NAME)
@@ -117,7 +114,16 @@ def readyz(store: ChatStore = Depends(get_store)):
     Khác /healthz ở chỗ: endpoint này ĐƯỢC PHÉP kiểm tra dependency. Load
     balancer dùng nó để quyết định có đẩy request vào instance này không.
     """
-    raise NotImplementedError("TODO (CP4): cài đặt /readyz")
+    if shutdown_guard.draining:
+        return JSONResponse(status_code=503, content={"status": "draining"})
+
+    if not store.ping():
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not ready", "redis": False},
+        )
+
+    return {"status": "ready", "redis": True}
 
 
 # ─────────────────────────────────────────────────────────────
